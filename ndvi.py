@@ -12,10 +12,10 @@ from xml.dom import minidom
 
 from settings import PL_AOIS, PL_API_KEY
 from pl_utils import * 
+from s3utils import *
 from utils import * 
 
 np.seterr(divide='ignore', invalid='ignore')
-
 
 def calculate_ndvi(filename, metadata_filename):
     with rasterio.open(filename) as src:
@@ -43,8 +43,8 @@ def calculate_ndvi(filename, metadata_filename):
     return ndvi
 
 def download_and_plot_scene(feature, results_dir):
-    if not os.path.exists('/media/rmsare/GALLIUMOS/' + results_dir):
-        os.mkdir('/media/rmsare/GALLIUMOS/' + results_dir)
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
 
     scene_id = feature['id']
     if 'img_' + scene_id + '.png' not in os.listdir(results_dir):
@@ -74,7 +74,6 @@ def download_and_plot_scene(feature, results_dir):
         
         np.save(results_dir + 'ndvi_' + scene_id + '.npy', ndvi)
         np.save(results_dir + 'img_' + scene_id + '.npy', image)
-
 
 def load_image(filename, metadata_filename):
     with rasterio.open(filename) as src:
@@ -110,8 +109,11 @@ def plot_image(image, label_string):
     ax.imshow(image)
     ax.axis('off')
     ax.set_title(label_string, fontsize=12)
-    plt.savefig(results_dir + 'img_' + label_string + '.png', dpi=200, bbox_inches='tight', pad_inches=0.5)
+    
+    filename = results_dir + 'img_' + label_string + '.png'
+    plt.savefig(filename, dpi=200, bbox_inches='tight', pad_inches=0.5)
     plt.close()
+    save_file_to_s3(filename, filename)
 
 def plot_ndvi(ndvi, label_string, results_dir):
     fig = plt.figure()
@@ -127,9 +129,11 @@ def plot_ndvi(ndvi, label_string, results_dir):
     ax.set_title(label_string, fontsize=12)
     cbar = fig.colorbar(cax, orientation='horizontal', shrink=0.5)
     cbar.set_label('NDVI')
-    plt.savefig(results_dir + 'ndvi_' + label_string + '.png', dpi=200, bbox_inches='tight', pad_inches=0.5)
+    
+    filename = results_dir + 'ndvi_' + label_string + '.png'
+    plt.savefig(filename, dpi=200, bbox_inches='tight', pad_inches=0.5)
     plt.close()
-
+    save_file_to_s3(filename, filename)
 
 if __name__ == "__main__":
     URL = "https://api.planet.com/data/v1"
