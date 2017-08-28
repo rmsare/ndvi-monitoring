@@ -47,7 +47,7 @@ def download_and_plot_scene(feature, results_dir):
         os.mkdir('/media/rmsare/GALLIUMOS/' + results_dir)
 
     scene_id = feature['id']
-    if 'img_' + scene_id + '.png' not in os.listdir('/media/rmsare/GALLIUMOS/' + results_dir):
+    if 'img_' + scene_id + '.png' not in os.listdir(results_dir):
         date_string = feature['properties']['acquired'] 
         print("Processing image acquired on " + date_string + " ({:d}/{:d})".format(i+1, n_scenes))
         assets_url = feature['_links']['assets']
@@ -72,8 +72,8 @@ def download_and_plot_scene(feature, results_dir):
         ndvi = calculate_ndvi(scene_filename, metadata_filename)
         plot_ndvi(ndvi, scene_id, results_dir) 
         
-        np.save('/media/rmsare/GALLIUMOS/' + results_dir + 'ndvi_' + scene_id + '.npy', ndvi)
-        np.save('/media/rmsare/GALLIUMOS/' + results_dir + 'img_' + scene_id + '.npy', image)
+        np.save(results_dir + 'ndvi_' + scene_id + '.npy', ndvi)
+        np.save(results_dir + 'img_' + scene_id + '.npy', image)
 
 
 def load_image(filename, metadata_filename):
@@ -110,7 +110,7 @@ def plot_image(image, label_string):
     ax.imshow(image)
     ax.axis('off')
     ax.set_title(label_string, fontsize=12)
-    plt.savefig('/media/rmsare/GALLIUMOS/' + results_dir + 'img_' + label_string + '.png', dpi=200, bbox_inches='tight', pad_inches=0.5)
+    plt.savefig(results_dir + 'img_' + label_string + '.png', dpi=200, bbox_inches='tight', pad_inches=0.5)
     plt.close()
 
 def plot_ndvi(ndvi, label_string, results_dir):
@@ -127,7 +127,7 @@ def plot_ndvi(ndvi, label_string, results_dir):
     ax.set_title(label_string, fontsize=12)
     cbar = fig.colorbar(cax, orientation='horizontal', shrink=0.5)
     cbar.set_label('NDVI')
-    plt.savefig('/media/rmsare/GALLIUMOS/' + results_dir + 'ndvi_' + label_string + '.png', dpi=200, bbox_inches='tight', pad_inches=0.5)
+    plt.savefig(results_dir + 'ndvi_' + label_string + '.png', dpi=200, bbox_inches='tight', pad_inches=0.5)
     plt.close()
 
 
@@ -137,7 +137,8 @@ if __name__ == "__main__":
     session = requests.Session()
     session.auth = (PL_API_KEY, "")
 
-    aois = PL_AOIS    
+    aois = PL_AOIS  
+    time_window_length = 14 # days
 
     for aoi in aois:
         print("Processing images for site: " + aoi.upper())
@@ -147,7 +148,7 @@ if __name__ == "__main__":
             aoi_polygon = json.load(file_obj) 
 
         datetime_max = datetime.utcnow() 
-        datetime_min = datetime.utcnow() - timedelta(days=14)
+        datetime_min = datetime.utcnow() - timedelta(days=time_window_length)
         
         item_types = ["PSScene4Band"]
         and_filter = configure_filter(aoi_polygon, datetime_min, datetime_max)
