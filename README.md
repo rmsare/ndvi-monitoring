@@ -1,2 +1,2 @@
 # ndvi-monitoring
-Produce timeseries of NDVI using Planetscope data
+Scripts to produce timeseries of NDVI using images from Planet Labs' Planetscope constellation
