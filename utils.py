@@ -8,6 +8,36 @@ from geojson import Polygon
 
 from datetime import datetime
 
+#def clip_tiff_by_shapefile(tiff_file, json_file):
+
+def convert_mat_to_json(filename, outfilename, source_epsg=32611, target_epsg=4326):
+    mat = loadmat(filename)
+    X = mat['xb'][0]
+    Y = mat['yb'][0]
+
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    for x, y in zip(X, Y):
+        ring.AddPoint(x, y)
+
+    polygon = ogr.Geometry(ogr.wkbPolygon) 
+    polygon.AddGeometry(ring)
+
+    source = osr.SpatialReference()
+    source.ImportFromEPSG(source_epsg)
+    target = osr.SpatialReference()
+    target.ImportFromEPSG(target_epsg)
+    transform = osr.CoordinateTransformation(source, target)
+    polygon.Transform(transform)
+
+    for i in range(0, polygon.GetGeometryCount()):
+        point = polygon.GetGeometryRef(i)
+        point.FlattenTo2D()
+
+    aoi = json.loads(polygon.ExportToJson())
+
+    with open(outfilename, 'w') as f:
+        json.dump(aoi, f)
+
 def convert_mat_to_aoi_bbox(filename, buf=1000, source_epsg=32611, target_epsg=4326):
     mat = loadmat(filename)
     x = mat['xb']
