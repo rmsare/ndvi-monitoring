@@ -106,16 +106,16 @@ def download_pl(url, filename=None):
 
     return filename
 
-def download_clip(url, scene_id):
+def download_clip(url, scene_id, data_dir):
     res = requests.get(url, stream=True, auth=(PL_API_KEY, ""))
 
-    with open('data/' + scene_id + '.zip', 'wb') as f:
+    with open(data_dir + 'data/' + scene_id + '.zip', 'wb') as f:
         for data in res.iter_content(chunk_size=1024):
             f.write(data)
             f.flush()
     
-    zipped = zipfile.ZipFile('data/' + scene_id + '.zip')
-    zipped.extractall('data/' + scene_id)
-    os.remove('data/' + scene_id + '.zip')
+    zipped = zipfile.ZipFile(data_dir + 'data/' + scene_id + '.zip')
+    zipped.extractall(data_dir + 'data/' + scene_id)
+    os.remove(data_dir + 'data/' + scene_id + '.zip')
 
-    return 'data/' + scene_id
+    return data_dir + 'data/' + scene_id
