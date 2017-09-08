@@ -1,4 +1,5 @@
 import os, sys
+from shutil import rmtree
 import rasterio
 import numpy as np
 import pandas as pd
@@ -62,6 +63,7 @@ def calculate_ndvi_timeseries(shape_file, images_dir):
         ndvi = calculate_ndvi(fn, images_dir + f + '/' + metadata_file)
         mean.append(np.nanmean(ndvi))
         sd.append(np.nanstd(ndvi))
+        os.remove(fn)
 
     data = pd.DataFrame(data={'m' : mean, 'sd' : sd}, index=dates)
 
@@ -76,7 +78,7 @@ def download_and_plot_scene(feature, results_dir):
         os.mkdir(results_dir + 'ts/')
 
     scene_id = feature['id']
-    if 'img_' + scene_id + '.png' not in os.listdir(results_dir):
+    if scene_id not in os.listdir(results_dir + 'data/'):
         date_string = feature['properties']['acquired'] 
         print("Processing image acquired on " + date_string + " ({:d}/{:d})".format(i+1, n_scenes))
         assets_url = feature['_links']['assets']
@@ -95,14 +97,18 @@ def download_and_plot_scene(feature, results_dir):
         
         #print("Saving image of scene...")
         image = load_image(scene_filename, metadata_filename)
-        plot_image(image, scene_id) 
+        if quality_check(image, scene_path):
+            plot_image(image, scene_id) 
 
-        #print("Calculating NDVI...")
-        ndvi = calculate_ndvi(scene_filename, metadata_filename)
-        plot_ndvi(ndvi, scene_id, results_dir) 
-        
-        np.save(results_dir + 'npy/ndvi_' + scene_id + '.npy', ndvi)
-        np.save(results_dir + 'npy/img_' + scene_id + '.npy', image)
+            #print("Calculating NDVI...")
+            ndvi = calculate_ndvi(scene_filename, metadata_filename)
+            plot_ndvi(ndvi, scene_id, results_dir) 
+            
+            np.save(results_dir + 'npy/ndvi_' + scene_id + '.npy', ndvi)
+            np.save(results_dir + 'npy/img_' + scene_id + '.npy', image)
+        else:
+            print(scene_id + " failed quailty check!")
+            rmtree(scene_path)
 
 def plot_image(image, label_string):
     fig = plt.figure()
@@ -141,15 +147,25 @@ def plot_ndvi_timeseries(data, label_string, results_dir):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     
-    plt.errorbar(data.index, data.m, 2*data.sd, color='r', marker='s', capsize=2)
+    plt.errorbar(data.index, data.m, 2*data.sd, linestyle='None', color='r', marker='s', capsize=2)
     ax.grid('on', linestyle=':')
     ax.set_title(label_string, fontsize=14)
     ax.set_ylabel('NDVI', fontsize=12)
     
     filename = results_dir + 'ts/ndvi_ts_' + label_string + '.png'
+    fig.set_size_inches(11, 8.5)
     plt.savefig(filename, dpi=200, bbox_inches='tight', pad_inches=0.5)
     plt.close()
     #save_file_to_s3(filename, filename)
+
+def quality_check(img, data_path, thresh=0.25):
+    # XXX: really crude quality check (for incomplete images with lots of blank space...)
+    npixels = np.prod(img.shape[0:2])
+    nblanks = len(np.where(img == 0.0)[0]) / 3.
+    if nblanks / npixels > thresh:
+        return False
+    else:
+        return True
 
 if __name__ == "__main__":
     URL = "https://api.planet.com/data/v1"
@@ -158,14 +174,14 @@ if __name__ == "__main__":
     session.auth = (PL_API_KEY, "")
 
     aois = PL_AOIS  
-    time_window_length = 120 # days
+    time_window_length = 90 # days
 
     for aoi in aois:
         print("Processing images for site: " + aoi.upper())
         base_dir = '/media/rmsare/GALLIUMOS/ndvi/'
         results_dir = base_dir + aoi + '/'
         aoi_filename = 'polygons/' + aoi + '.json'
-        shape_filename = 'polygons/' + aoi + '.shp'
+        shape_filename = 'shp/' + aoi + '.shp'
         with open(aoi_filename, 'r') as file_obj:
             aoi_polygon = json.load(file_obj) 
 
@@ -191,12 +207,12 @@ if __name__ == "__main__":
         for i, feature in enumerate(geojson['features']):
             try:
                 download_and_plot_scene(feature, results_dir)
-            except (KeyError, ValueError) as e:
+            except (ConnectionError, KeyError, ValueError) as e:
                 failed.append(feature)
                 print("Error: " + str(e))
                 print("Failed to process image acquired on " + feature['properties']['acquired'])
 
         print("Calculating average NDVI timeseries...")
         ts = calculate_ndvi_timeseries(shape_filename, results_dir + 'data/')
-        plot_ndvi_timeseries(ts, aoi, results_dir)
+        plot_ndvi_timeseries(ts, aoi.upper(), results_dir)
         
