@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 
 from xml.dom import minidom
 
+from requests.exceptions import ConnectionError
+
 from settings import PL_AOIS, PL_API_KEY
 from pl_utils import * 
 from s3utils import *
