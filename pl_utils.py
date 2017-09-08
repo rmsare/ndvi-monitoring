@@ -24,12 +24,18 @@ def activate_asset(asset):
         print("User does not have permissions to download asset")
     else:
         activated = False
-        while not activated:
+        timeout = 120 # s
+        elapsed = 0
+        while not activated and elapsed < timeout:
             check_status = session.get(asset_url)
             if check_status.json()['status'] == 'active':
                 activated = True
             else:
+                elapsed += 1
                 time.sleep(1)
+
+        if elapsed == timeout:
+            print("Activation timed out!")
 
     return res.status_code
 
@@ -49,14 +55,19 @@ def clip_asset(item_id, aoi_polygon):
     clip_url = request.json()['_links']['_self']
 
     clip_succeeded = False
-    while not clip_succeeded:
+    timeout = 120 # s
+    elapsed = 0
+    while not clip_succeeded and elapsed < timeout:
         check_state_request = requests.get(clip_url, auth=(PL_API_KEY, ''))
         
         if check_state_request.json()['state'] == 'succeeded':
             clip_download_url = check_state_request.json()['_links']['results'][0]
             clip_succeeded = True
         else:
+            elapsed += 1
             time.sleep(1)
+    if elapsed == timeout:
+        print("Clipping timed out!")
 
     return clip_download_url
 
