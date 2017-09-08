@@ -1,14 +1,28 @@
+import os
 import numpy as np
 import matplotlib.colors as colors
 from scipy.io import loadmat
 import json
+from xml.dom import minidom
+import rasterio
+import subprocess
 
 from osgeo import ogr, osr
 from geojson import Polygon
 
 from datetime import datetime
 
-#def clip_tiff_by_shapefile(tiff_file, json_file):
+def clip_tiff_by_shapefile(tiff_file, metadata_file, shapefile):
+    out_file = tiff_file[:-4] + '_clip.tif'
+    
+    # XXX: hacky, eventually port to native gdal
+    command = ["gdalwarp", "-dstnodata", "nan", "-cutline", shapefile, tiff_file, out_file]
+    try:
+        output = subprocess.check_output(command)
+    except:
+        print("Clipping " + tiff_file + " failed!")
+
+    return out_file
 
 def convert_mat_to_json(filename, outfilename, source_epsg=32611, target_epsg=4326):
     mat = loadmat(filename)
@@ -71,6 +85,33 @@ def convert_mat_to_aoi_bbox(filename, buf=1000, source_epsg=32611, target_epsg=4
     aoi = polygon.ExportToJson()
 
     return aoi
+
+def load_image(filename, metadata_filename):
+    with rasterio.open(filename) as src:
+        band_blue = src.read(1)
+
+    with rasterio.open(filename) as src:
+        band_green = src.read(2)
+    
+    with rasterio.open(filename) as src:
+        band_red = src.read(3)
+
+    xmldoc = minidom.parse(metadata_filename)
+    nodes = xmldoc.getElementsByTagName("ps:bandSpecificMetadata")
+
+    coeff = {}
+    for node in nodes:
+        band_num = node.getElementsByTagName("ps:bandNumber")[0].firstChild.data
+        if band_num in ['1', '2', '3', '4']:
+            i = int(band_num)
+            value = node.getElementsByTagName("ps:reflectanceCoefficient")[0].firstChild.data
+            coeff[i] = float(value)
+
+    band_blue = band_blue*coeff[1]
+    band_green = band_green*coeff[2]
+    band_red = band_red*coeff[3]
+
+    return np.stack([band_red, band_blue, band_green], axis=-1)
 
 def print_json(data):
     print(json.dumps(data, indent=2))
