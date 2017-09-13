@@ -55,21 +55,35 @@ def calculate_ndvi_timeseries(shape_file, images_dir):
 
     for f in os.listdir(images_dir):
         for temp in os.listdir(images_dir + f):
-            if 'clip.tif' in temp and 'udm' not in temp:
+            if 'AnalyticMS_clip.tif' in temp:
                 tiff_file = temp 
             if 'metadata' in temp:
                 metadata_file = temp 
 
-        dates.append(datetime.strptime(tiff_file[0:15], "%Y%m%d_%H%M%S"))
-        fn = clip_tiff_by_shapefile(images_dir + f + '/' + tiff_file, images_dir + f + '/' + metadata_file, shape_file)
-        ndvi = calculate_ndvi(fn, images_dir + f + '/' + metadata_file)
-        mean.append(np.nanmean(ndvi))
-        sd.append(np.nanstd(ndvi))
-        os.remove(fn)
+        image = load_image(images_dir + f + '/' + tiff_file, images_dir + f + '/' + metadata_file)
+        if quality_check(image):
+            dates.append(datetime.strptime(tiff_file[0:15], "%Y%m%d_%H%M%S"))
+            fn = clip_tiff_by_shapefile(images_dir + f + '/' + tiff_file, shape_file)
+            ndvi = calculate_ndvi(fn, images_dir + f + '/' + metadata_file)
+            mean.append(np.nanmean(ndvi))
+            sd.append(np.nanstd(ndvi))
+            os.remove(fn)
+        else:
+            print(tiff_file + " failed quality check!")
 
     data = pd.DataFrame(data={'m' : mean, 'sd' : sd}, index=dates)
+    pd.to_pickle(data, images_dir + '../timeseries.pk')
 
     return data
+
+def update_ndvi_timeseries(data, results_dir):
+    if os.path.exists(results_dir + 'timeseries.pk'):
+        old_data = pd.read_pickle(results_dir + 'timeseries.pk')
+        data = old_data.append(data)
+        data = data.drop_duplicates()
+        data.to_pickle(results_dir + 'timeseries.pk')
+    else:
+        data.to_pickle(results_dir + 'timeseries.pk')
 
 def download_and_plot_scene(feature, results_dir):
     if not os.path.exists(results_dir):
@@ -90,16 +104,16 @@ def download_and_plot_scene(feature, results_dir):
         scene = assets['analytic']
         #print("Clipping scene to area of interest...")
         clip_url = clip_asset(scene_id, aoi_polygon)
-        #print("Downloading clipped scene data...")
-        scene_path = download_clip(clip_url, scene_id, results_dir)
+        if clip_url:
+            #print("Downloading clipped scene data...")
+            scene_path = download_clip(clip_url, scene_id, results_dir)
 
-        files = sorted(os.listdir(scene_path))
-        scene_filename = os.path.join(scene_path, files[1])
-        metadata_filename = os.path.join(scene_path, files[2])
-        
-        #print("Saving image of scene...")
-        image = load_image(scene_filename, metadata_filename)
-        if quality_check(image, scene_path):
+            files = sorted(os.listdir(scene_path))
+            scene_filename = os.path.join(scene_path, files[1])
+            metadata_filename = os.path.join(scene_path, files[2])
+            
+            #print("Saving image of scene...")
+            image = load_image(scene_filename, metadata_filename)
             plot_image(image, scene_id) 
 
             #print("Calculating NDVI...")
@@ -108,9 +122,6 @@ def download_and_plot_scene(feature, results_dir):
             
             np.save(results_dir + 'npy/ndvi_' + scene_id + '.npy', ndvi)
             np.save(results_dir + 'npy/img_' + scene_id + '.npy', image)
-        else:
-            print(scene_id + " failed quailty check!")
-            rmtree(scene_path)
 
 def plot_image(image, label_string):
     fig = plt.figure()
@@ -160,7 +171,7 @@ def plot_ndvi_timeseries(data, label_string, results_dir):
     plt.close()
     #save_file_to_s3(filename, filename)
 
-def quality_check(img, data_path, thresh=0.25):
+def quality_check(img, thresh=0.25):
     # XXX: really crude quality check (for incomplete images with lots of blank space...)
     npixels = np.prod(img.shape[0:2])
     nblanks = len(np.where(img == 0.0)[0]) / 3.
@@ -169,6 +180,25 @@ def quality_check(img, data_path, thresh=0.25):
     else:
         return True
 
+def save_ndvi_tiff(filename, metadata_filename):
+    ndvi = calculate_ndvi(filename, metadata_filename)
+
+    with rasterio.open(filename) as data:
+        ndvi_raster = rasterio.open('ndvi.tif', 'w', driver=data.driver, height=data.height, width=data.width, count=1, dtype=rasterio.float64, crs=data.crs, transform=data.transform)
+        ndvi_raster.write(ndvi, 1)
+        ndvi_raster.close()
+
+def save_all_tiffs(images_dir):
+    for f in os.listdir(images_dir):
+        for temp in os.listdir(images_dir + f):
+            if 'clip.tif' in temp and 'udm' not in temp:
+                tiff_file = temp 
+            if 'metadata' in temp:
+                metadata_file = temp 
+        os.chdir(images_dir + f)
+        save_ndvi_tiff(tiff_file, metadata_file)
+        os.chdir('..')
+
 if __name__ == "__main__":
     URL = "https://api.planet.com/data/v1"
     search_url = "{}/quick-search".format(URL)
@@ -176,7 +206,7 @@ if __name__ == "__main__":
     session.auth = (PL_API_KEY, "")
 
     aois = PL_AOIS  
-    time_window_length = 90 # days
+    time_window_length = 365 / 2 # days
 
     for aoi in aois:
         print("Processing images for site: " + aoi.upper())
@@ -215,6 +245,7 @@ if __name__ == "__main__":
                 print("Failed to process image acquired on " + feature['properties']['acquired'])
 
         print("Calculating average NDVI timeseries...")
-        ts = calculate_ndvi_timeseries(shape_filename, results_dir + 'data/')
-        plot_ndvi_timeseries(ts, aoi.upper(), results_dir)
+        data = calculate_ndvi_timeseries(shape_filename, results_dir + 'data/')
+        plot_ndvi_timeseries(data, aoi.upper(), results_dir)
+        update_ndvi_timeseries(data, results_dir)
         
