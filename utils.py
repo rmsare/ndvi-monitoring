@@ -12,7 +12,7 @@ from geojson import Polygon
 
 from datetime import datetime
 
-def clip_tiff_by_shapefile(tiff_file, metadata_file, shapefile):
+def clip_tiff_by_shapefile(tiff_file, shapefile):
     out_file = tiff_file[:-4] + '_clip.tif'
     
     # XXX: hacky, eventually port to native gdal
