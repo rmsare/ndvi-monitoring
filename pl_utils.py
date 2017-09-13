@@ -55,7 +55,8 @@ def clip_asset(item_id, aoi_polygon):
     clip_url = request.json()['_links']['_self']
 
     clip_succeeded = False
-    timeout = 120 # s
+    clip_download_url = None
+    timeout = 5*60 # s
     elapsed = 0
     while not clip_succeeded and elapsed < timeout:
         check_state_request = requests.get(clip_url, auth=(PL_API_KEY, ''))
