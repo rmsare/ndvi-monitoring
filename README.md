@@ -7,7 +7,8 @@ Heavily indebted to Planet tutorials for the [Clipping API](https://github.com/p
 - Commenting, cleanup, and refactoring to remove hacky GDAL binary calls
 - Update filters to download only summer/fall months
   - ~~Alternatively, use color threhold to discard image with high % of snow cover~~
+- Extend to pre-2014 with RapidEye data.
 - Add QA/QC for obviously defective imagery (apply size, ~~color thresholds~~)
 - Extract NDVI timeseries from survey areas, ~~neighborhood averages~~, per-pixel
-- Deploy on EC2
+- ~~Deploy on EC2~~
 - Detect changepoints and model seasonal trends in NDVI timeseries
